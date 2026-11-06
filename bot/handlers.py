@@ -18,14 +18,12 @@ from aiogram.types import (
 from aiogram.utils.chat_action import ChatActionSender
 
 from bot.account import PROFILE_BUTTON, TOPUP_BUTTON, ensure_access, main_keyboard, subscribe_keyboard
-from bot.billing import AI, FREE, IMAGE, PREMIUM, TRANSLATE, TRIAL, TRIAL_DAYS, VOICE, Billing, format_date
+from bot.billing import AI, FREE, IMAGE, PREMIUM, TRANSLATE, TRIAL, TRIAL_DAYS, Billing, format_date
 from bot.calculator import CalcError, calculate, looks_like_expression
 from bot.documents import MAX_CHARS, MAX_FILE_SIZE, DocumentError, extract_text, is_supported
 from bot.formatting import markdown_to_html, split_text
 from bot.llm import LLMError, OpenRouterClient
 from bot.memory import DialogMemory
-from bot.speech import SpeechRecognizer
-
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -52,8 +50,6 @@ TRANSLATE_PHOTO_PROMPT = (
 DOCUMENT_DEFAULT_PROMPT = "Сделай краткое содержание: о чём документ, главные мысли и выводы."
 DOCUMENT_PROMPT = "Текст файла «{name}»:\n\n{text}\n\n---\nЗадание пользователя: {task}"
 
-MAX_VOICE_SECONDS = 180
-
 IMAGE_REQUEST_RE = re.compile(
     r"^(?:нарисуй|сгенерируй\s+(?:картинку|изображение|фото)|создай\s+(?:картинку|изображение)|draw)[\s:,-]+(.+)",
     re.IGNORECASE | re.DOTALL,
@@ -62,7 +58,6 @@ IMAGE_REQUEST_RE = re.compile(
 HELP_TEXT = (
     "Я умею:\n\n"
     "💬 Отвечать на любые вопросы — просто напишите сообщение\n"
-    "🎤 Понимать голосовые — запишите вопрос голосом, и я отвечу\n"
     "🧮 Считать примеры — напишите, например, 2+2*3 или /calc sqrt(16)+5^2\n"
     "📝 Решать задачи по шагам — /solve <задача>\n"
     "💡 Давать советы — /advice <ситуация>\n"
@@ -102,10 +97,9 @@ async def answer_with_ai(
     billing: Billing,
     content: str | list,
     history_text: str,
-    kind: str | None = AI,
+    kind: str = AI,
 ) -> None:
-    """kind — какой лимит тратит запрос; None, если он уже списан (например, за голосовое)."""
-    if kind and not await ensure_access(message, billing, kind):
+    if not await ensure_access(message, billing, kind):
         return
 
     chat_id = message.chat.id
@@ -125,8 +119,7 @@ async def answer_with_ai(
         await message.answer("Не получилось ответить, попробуйте переформулировать вопрос.")
         return
 
-    if kind:
-        billing.add_usage(message.from_user.id, kind)
+    billing.add_usage(message.from_user.id, kind)
     memory.add(chat_id, "user", history_text)
     memory.add(chat_id, "assistant", reply)
     await send_long(message, reply)
@@ -150,15 +143,8 @@ async def send_generated_image(
 
 
 async def process_text(
-    message: Message,
-    bot: Bot,
-    llm: OpenRouterClient,
-    memory: DialogMemory,
-    billing: Billing,
-    text: str,
-    kind: str | None = AI,
+    message: Message, bot: Bot, llm: OpenRouterClient, memory: DialogMemory, billing: Billing, text: str
 ) -> None:
-    """Общая обработка текста — и набранного, и распознанного из голосового."""
     if looks_like_expression(text):
         try:
             await message.answer(f"{text.rstrip('=?').strip()} = {calculate(text.rstrip('?'))}")
@@ -171,12 +157,12 @@ async def process_text(
         await send_generated_image(message, bot, llm, billing, image_request.group(1).strip())
         return
 
-    await answer_with_ai(message, bot, llm, memory, billing, text, text, kind)
+    await answer_with_ai(message, bot, llm, memory, billing, text, text)
 
 
 QUICK_START_HINTS = {
     "ask": (
-        "💬 Просто напишите вопрос в чат или запишите голосовое — я отвечу.\n\n"
+        "💬 Просто напишите вопрос в чат — я отвечу.\n\n"
         "Например: «Почему небо голубое?»"
     ),
     "solve": (
@@ -225,9 +211,9 @@ async def cmd_start(message: Message, bot: Bot, billing: Billing) -> None:
         text = (
             f"Привет, {user.first_name}! 👋\n\n"
             f"Я {bot_name} — твой умный помощник. Отвечаю на вопросы, решаю задачи (даже по фото), "
-            "понимаю голосовые, перевожу и рисую картинки.\n\n"
+            "перевожу и рисую картинки.\n\n"
             f"🎁 Тебе подарен пробный период на {TRIAL_DAYS} дня: {TRIAL.daily_ai} ответов, "
-            f"{TRIAL.daily_images} картинок, {TRIAL.voice} голосовых и {TRIAL.translate} перевода."
+            f"{TRIAL.daily_images} картинок и {TRIAL.translate} перевода."
         )
     else:
         text = f"С возвращением, {user.first_name}! 👋\n\n"
@@ -365,36 +351,8 @@ async def on_photo(
 
 
 @router.message(F.voice | F.video_note | F.audio)
-async def on_voice(
-    message: Message,
-    bot: Bot,
-    llm: OpenRouterClient,
-    memory: DialogMemory,
-    billing: Billing,
-    speech: SpeechRecognizer,
-) -> None:
-    media = message.voice or message.video_note or message.audio
-    if media.duration and media.duration > MAX_VOICE_SECONDS:
-        await message.answer(f"Запись слишком длинная. Пришлите голосовое до {MAX_VOICE_SECONDS // 60} минут.")
-        return
-    if not await ensure_access(message, billing, VOICE):
-        return
-
-    async with ChatActionSender.typing(bot=bot, chat_id=message.chat.id):
-        audio = await bot.download(media)
-        try:
-            text = await speech.transcribe(audio)
-        except Exception:
-            logger.exception("Не удалось распознать голосовое сообщение")
-            await message.answer("⚠️ Не получилось распознать запись. Попробуйте ещё раз или напишите текстом.")
-            return
-
-    if not text:
-        await message.answer("🎤 Не расслышал слов в записи. Попробуйте сказать громче или ближе к микрофону.")
-        return
-    billing.add_usage(message.from_user.id, VOICE)
-    await message.reply(f"🎤 {text}")
-    await process_text(message, bot, llm, memory, billing, text, kind=None)
+async def on_voice(message: Message) -> None:
+    await message.answer("🎤 Голосовые сообщения я не понимаю — напишите, пожалуйста, вопрос текстом.")
 
 
 @router.message(F.document)

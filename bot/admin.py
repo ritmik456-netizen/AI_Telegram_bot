@@ -81,7 +81,6 @@ async def cmd_stats(message: Message, billing: Billing) -> None:
         f"💰 Пополнений всего: {s['payments_total']} на {s['stars_total']} ⭐\n"
         f"🏦 Звёзд на балансах пользователей: {s['balances']} ⭐\n\n"
         f"💬 Ответов нейросети сегодня: {s['ai_today']}\n"
-        f"🎤 Голосовых сегодня: {s['voice_today']}\n"
         f"🌍 Переводов сегодня: {s['translate_today']}\n"
         f"🎨 Картинок сегодня: {s['image_today']}"
     )

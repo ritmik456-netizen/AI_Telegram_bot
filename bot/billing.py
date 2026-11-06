@@ -9,13 +9,11 @@ SUBSCRIPTION_DAYS = 30
 
 AI = "ai"
 IMAGE = "image"
-VOICE = "voice"
 TRANSLATE = "translate"
 
 KIND_WORDS = {
     AI: ("ответ", "ответа", "ответов"),
     IMAGE: ("картинку", "картинки", "картинок"),
-    VOICE: ("голосовое", "голосовых", "голосовых"),
     TRANSLATE: ("перевод", "перевода", "переводов"),
 }
 
@@ -35,8 +33,6 @@ class Plan:
     price: int
     daily_ai: int
     daily_images: int
-    voice: int | None = 0
-    """Голосовых в день; None — без лимита."""
     translate: int | None = 0
     """Переводов в день; None — без лимита."""
     files: bool = False
@@ -45,17 +41,16 @@ class Plan:
 
 
 FREE = Plan("free", "Бесплатный", 0, 0, 0)
-PRO = Plan("pro", "Про", 40, 25, 5, voice=5, translate=None)
-PREMIUM = Plan("premium", "Премиум", 80, 35, 15, voice=15, translate=None, files=True)
+PRO = Plan("pro", "Про", 40, 25, 5, translate=None)
+PREMIUM = Plan("premium", "Премиум", 80, 35, 15, translate=None, files=True)
 TRIAL = Plan(
     "trial",
     "Пробный период",
     0,
     daily_ai=20,
     daily_images=5,
-    voice=3,
     translate=3,
-    total_kinds=frozenset({AI, IMAGE, VOICE, TRANSLATE}),
+    total_kinds=frozenset({AI, IMAGE, TRANSLATE}),
 )
 PAID_PLANS = {PRO.key: PRO, PREMIUM.key: PREMIUM}
 
@@ -114,7 +109,7 @@ def format_date(value: datetime) -> str:
 
 
 def plan_limit(plan: Plan, kind: str) -> int | None:
-    return {AI: plan.daily_ai, IMAGE: plan.daily_images, VOICE: plan.voice, TRANSLATE: plan.translate}[kind]
+    return {AI: plan.daily_ai, IMAGE: plan.daily_images, TRANSLATE: plan.translate}[kind]
 
 
 def offerable_plans(account: Account) -> list[Plan]:
@@ -186,7 +181,7 @@ class Billing:
             return (
                 "⏳ Пробный период закончился.\n\n"
                 "Бесплатно доступен калькулятор (например, 2+2*3), а ответы нейросети, решение задач, "
-                "советы, перевод, голосовые и картинки — по подписке."
+                "советы, перевод и картинки — по подписке."
             )
 
         limit = plan_limit(account.plan, kind)

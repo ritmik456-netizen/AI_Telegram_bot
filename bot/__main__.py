@@ -15,7 +15,6 @@ from bot.config import load_config
 from bot.handlers import router
 from bot.llm import OpenRouterClient
 from bot.memory import DialogMemory
-from bot.speech import SpeechRecognizer
 
 COMMANDS = [
     BotCommand(command="start", description="Начать"),
@@ -37,7 +36,6 @@ def bot_description(name: str) -> str:
         f"🤖 {name} — твой умный помощник в Telegram.\n\n"
         "💬 Отвечает на любые вопросы\n"
         "🧮 Решает задачи и примеры, в том числе по фото\n"
-        "🎤 Понимает голосовые сообщения\n"
         "🌍 Переводит текст и фото\n"
         "🎨 Рисует картинки\n"
         "📄 Читает PDF и Word\n\n"
@@ -46,7 +44,7 @@ def bot_description(name: str) -> str:
 
 
 SHORT_DESCRIPTION = (
-    "Умный помощник: ответы на вопросы, решение задач, голосовые, перевод и картинки. "
+    "Умный помощник: ответы на вопросы, решение задач по фото, перевод и картинки. "
     f"{TRIAL_DAYS} дня бесплатно!"
 )
 
@@ -69,13 +67,6 @@ async def set_commands(bot: Bot, admin_ids: frozenset[int]) -> None:
             logging.warning("Не удалось показать админ-команды пользователю %s: он ещё не писал боту", admin_id)
 
 
-async def preload_speech(speech: SpeechRecognizer) -> None:
-    try:
-        await speech.preload()
-    except Exception:
-        logging.exception("Не удалось загрузить модель распознавания речи")
-
-
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config = load_config()
@@ -90,7 +81,6 @@ async def main() -> None:
     llm = OpenRouterClient(config.openrouter_api_key, config.text_models, config.image_model)
     memory = DialogMemory(config.history_limit)
     billing = Billing(config.database_path)
-    speech = SpeechRecognizer(config.whisper_model)
 
     await set_commands(bot, config.admin_ids)
     await set_profile(bot)
@@ -103,17 +93,11 @@ async def main() -> None:
         config.database_path,
         ", ".join(map(str, config.admin_ids)) or "нет",
     )
-    background_tasks = [
-        asyncio.create_task(renewal_offer_loop(bot, billing)),
-        asyncio.create_task(preload_speech(speech)),
-    ]
+    renewal_task = asyncio.create_task(renewal_offer_loop(bot, billing))
     try:
-        await dispatcher.start_polling(
-            bot, llm=llm, memory=memory, billing=billing, speech=speech, admin_ids=config.admin_ids
-        )
+        await dispatcher.start_polling(bot, llm=llm, memory=memory, billing=billing, admin_ids=config.admin_ids)
     finally:
-        for task in background_tasks:
-            task.cancel()
+        renewal_task.cancel()
         billing.close()
         await llm.close()
         await bot.session.close()

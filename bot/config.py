@@ -19,7 +19,6 @@ class Config:
     history_limit: int
     database_path: str
     admin_ids: frozenset[int]
-    whisper_model: str
 
 
 def load_config() -> Config:
@@ -38,5 +37,4 @@ def load_config() -> Config:
         history_limit=int(os.getenv("HISTORY_LIMIT", "20")),
         database_path=os.getenv("DATABASE_PATH", "").strip() or str(DEFAULT_DATABASE_PATH),
         admin_ids=frozenset(int(item) for item in os.getenv("ADMIN_IDS", "").replace(" ", "").split(",") if item),
-        whisper_model=os.getenv("WHISPER_MODEL", "small").strip(),
     )

@@ -26,7 +26,6 @@ from bot.billing import (
     PRO,
     SUBSCRIPTION_DAYS,
     TRANSLATE,
-    VOICE,
     Account,
     Billing,
     Plan,
@@ -109,7 +108,6 @@ def describe_limit(plan: Plan, kind: str) -> str:
 def describe_plan(plan: Plan) -> str:
     lines = [
         f"• ответы, советы, решение задач и разбор фото — {describe_limit(plan, AI)}",
-        f"• голосовые сообщения — {describe_limit(plan, VOICE)}",
         f"• перевод — {describe_limit(plan, TRANSLATE)}",
         f"• генерация картинок — {describe_limit(plan, IMAGE)}",
     ]
@@ -152,7 +150,6 @@ def usage_lines(billing: Billing, user_id: int, plan: Plan) -> list[str]:
     lines = []
     for icon, kind, title in (
         ("💬", AI, "Ответов"),
-        ("🎤", VOICE, "Голосовых"),
         ("🌍", TRANSLATE, "Переводов"),
         ("🎨", IMAGE, "Картинок"),
     ):
@@ -340,7 +337,7 @@ def purchase_offer(account: Account) -> tuple[str, InlineKeyboardMarkup]:
         action = "Продлить" if plan is account.plan else "Купить"
         note = " (оставшиеся дни Про сгорят)" if account.plan is PRO and plan is PREMIUM else ""
         lines.append(
-            f"• {plan.title} — {plan.price} ⭐: {plan.daily_ai} ответов, {plan.voice} голосовых "
+            f"• {plan.title} — {plan.price} ⭐: {plan.daily_ai} ответов "
             f"и {plan.daily_images} картинок в день, перевод без лимита, "
             f"до {format_date(until)}{note}"
         )

@@ -13,7 +13,7 @@ EXPENSIVE_COMMANDS = {"solve", "advice", "image", "img", "translate"}
 
 def is_expensive(message: Message) -> bool:
     """Запросы, которые тратят нейросеть или процессор. Калькулятор, меню и оплата сюда не входят."""
-    if message.photo or message.voice or message.video_note or message.audio or message.document:
+    if message.photo or message.document:
         return True
     text = message.text
     if not text or text in (PROFILE_BUTTON, TOPUP_BUTTON) or looks_like_expression(text):
